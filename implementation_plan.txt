@@ -1,0 +1,105 @@
+STORE RATING PLATFORM - PRODUCTION GRADE IMPLEMENTATION PLAN (WITH ADVANCED DB SCALING)
+========================================================================================
+
+1. SYSTEM ARCHITECTURE & DATA FLOW
+----------------------------------
+The system is built as a multi-tier web application, designed for horizontal scalability, high availability, and low-latency response times.
+
+Architecture Diagram (Conceptual):
+[React.js Frontend] <--> [Nginx Load Balancer] <--> [Express.js Backend Instances (MVC)]
+                                                   |--> [Redis Cache / Session / Rate Limits]
+                                                   |--> [Outbox Worker] --> [Message Broker / RabbitMQ Fanout]
+                                                                                |--> [Queue A: Read Aggregator Worker]
+                                                                                |--> [Queue B: Notifications Worker]
+                                                                                |--> [Queue C: Audit Log Worker]
+                                                   |--> [SQL Write Primary DB] -.-> (WAL Replication) -.-> [SQL Read Replica DB]
+
+Website Data Flows:
+A. User Registration & Auth with Rate Limiting
+   - Client sends registration details (validated: Name 20-60 chars, Address max 400 chars, Password 8-16 chars with 1 uppercase and 1 special char).
+   - Backend hashes password (bcrypt) and registers user in SQL database.
+   - Login checks **Dual-Key Sliding Window Rate Limiting** in Redis (IP-based and email-based) to prevent brute force. If limits are exceeded, returns `429 Too Many Requests`.
+   - Successful login returns JWT (Access token in memory, Refresh token in secure HttpOnly cookie).
+B. Scaled Store Listings & Ratings (CQRS & Transactional Outbox)
+   - Client requests stores list with filters (Name, Address) and sorting.
+   - Backend checks Redis cache. If present, returns cached result. If absent, queries SQL Replica DB (reads) and populates cache.
+   - When a rating is submitted, the backend writes the rating AND an event payload to the `outbox_events` table in a single local transaction on the Primary DB.
+   - A publisher worker reads the outbox, broadcasts the message to a RabbitMQ Fanout Exchange.
+   - The exchange routes the event to multiple consumers (Aggregator updates store stats on the Primary DB which copies to Replica DB; Notification worker notifies store owners).
+   - Redis cache for store listings is invalidated.
+
+2. DATABASE SCHEMA DESIGN (SQL)
+-------------------------------
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(60) NOT NULL CHECK (LENGTH(name) >= 20),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    address VARCHAR(400) NOT NULL,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'user', 'owner')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE stores (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    address VARCHAR(400) NOT NULL,
+    owner_id UUID UNIQUE REFERENCES users(id) ON DELETE SET NULL,
+    average_rating NUMERIC(3,2) DEFAULT 0.00,
+    total_ratings INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE ratings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    store_id UUID NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_user_store_rating UNIQUE (user_id, store_id)
+);
+
+CREATE TABLE outbox_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_type VARCHAR(100) NOT NULL,
+    payload JSONB NOT NULL,
+    status VARCHAR(20) DEFAULT 'PENDING',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_stores_name_address ON stores(name, address);
+CREATE INDEX idx_ratings_store_id ON ratings(store_id);
+CREATE INDEX idx_outbox_status_created ON outbox_events(status, created_at);
+
+3. INDUSTRY BEST PRACTICES & SYSTEM DESIGN PATTERNS
+---------------------------------------------------
+- CQRS (Command Query Responsibility Segregation): Write operations hit the Primary DB. Read operations query the Replica DB or Redis cache.
+- Transactional Outbox Pattern: Ensures that database updates and events are committed atomically, preventing consistency failures.
+- Fanout Message Queues: Broadcasts ratings events to multiple queues asynchronously, decoupling statistics processing from notification logic.
+- Caching Strategy: Redis cache handles hot endpoints (store listings). Selective invalidations occur during data updates.
+- Rate Limiting: Employs Redis-based **Sliding Window Counter** using Sorted Sets (`ZSET`) to rate-limit authentication endpoints on a dual-key configuration (IP and Email).
+
+4. PROJECT DEVELOPMENT PHASES
+-----------------------------
+Phase 1: Infrastructure, DB Schema & MVC Setup
+- Initialize Node.js TypeScript Express project.
+- Create migrations including the `outbox_events` table. Configure Primary-Replica connection pool.
+Phase 2: Authentication & Core Backend API
+- Build signup/login routes, JWT middlewares, and Redis-based Sliding Window Rate Limiting middleware.
+- Develop CRUD controllers and services for Admin, User, and Store Owner.
+Phase 3: Scaling, Queues & Cache
+- Configure RabbitMQ (or BullMQ) and setup the Outbox Publisher.
+- Implement Queue Consumers for statistics aggregation and notifications.
+- Integrate Redis caching with event-driven invalidation.
+Phase 4: Responsive React.js Frontend
+- Set up React + Vite project with TypeScript.
+- Implement validations (Name 20-60 chars) and responsive dashboards.
+Phase 5: Verification & Production Setup
+- Write integration tests (Jest & Supertest).
+- Create docker-compose environment combining web app, database clusters, brokers, cache, and Nginx.

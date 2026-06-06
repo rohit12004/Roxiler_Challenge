@@ -1,0 +1,30 @@
+# Dependency directories
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Local env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+server/.env
+client/.env
+
+# IDE / System files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+.gemini/
+.tempmediaStorage/
+
+# Docker volumes / databases (if mounted locally)
+mysql_data/
+redis_data/
