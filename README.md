@@ -51,25 +51,73 @@ The application supports three distinct user roles, each with custom dashboard v
 
 ## 💾 Data Flow & Caching Architecture
 
-### Client-Side Data Flow
+### 1. System Architecture
 
+```mermaid
+graph TD
+    subgraph Client ["Client Space (React SPA)"]
+        UI["React UI Components"]
+        Zustand["Zustand Store (Auth & Session)"]
+        TSQ["TanStack Query (Server State Cache)"]
+        Axios["Axios Client (with Refresh Interceptor)"]
+        
+        UI --> Zustand
+        UI --> TSQ
+        TSQ --> Axios
+        Zustand --> Axios
+    end
+
+    subgraph Server ["Server Space (Express API)"]
+        Router["Express API Router"]
+        Middleware["Middlewares (Auth, Roles, Zod Validation)"]
+        Controllers["Controllers (User, Store, Review)"]
+        Services["Services (Business Logic)"]
+        
+        Router --> Middleware
+        Middleware --> Controllers
+        Controllers --> Services
+    end
+
+    subgraph DB ["Data Tier"]
+        MySQL[("MySQL Relational Database")]
+        Redis[("Redis In-Memory Cache")]
+    end
+
+    Axios <--> Router
+    Services <--> MySQL
+    Services <--> Redis
+
+    style Client fill:#eef2ff,stroke:#6366f1,stroke-width:2px
+    style Server fill:#f0fdf4,stroke:#22c55e,stroke-width:2px
+    style DB fill:#fff7ed,stroke:#f97316,stroke-width:2px
 ```
-   [ User Action / Form Submit ]
-                 │
-                 ▼
-     useMutation (TanStack Query)
-                 │
-                 ▼
-      [ Axios POST Request ]
-                 │
-                 ▼
-    onSuccess Callback (Mutation)
-                 │
-                 ▼
-     queryClient.invalidateQueries
-                 │
-                 ▼
-       Re-fetch Active Queries ───► UI Automatically Refreshes
+
+### 2. Client-Side Data Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Customer / User
+    participant UI as React UI Component
+    participant TSQ as TanStack Query (useMutation)
+    participant Axios as Axios Client
+    participant API as Express API Server
+
+    User->>UI: Submit Review Form
+    UI->>TSQ: mutate(reviewData)
+    TSQ->>Axios: POST /api/reviews
+    Axios->>API: Send Request with Cookies
+    API-->>Axios: 201 Created (Success)
+    Axios-->>TSQ: Success Response
+    TSQ->>UI: onSuccess() callback
+    UI->>TSQ: queryClient.invalidateQueries(['stores'])
+    Note over TSQ: Mark 'stores' cache as stale
+    TSQ->>Axios: Background GET /api/stores
+    Axios->>API: Fetch updated stores
+    API-->>Axios: Updated list (MySQL updated)
+    Axios-->>TSQ: Receive new stores data
+    TSQ->>UI: Update state & trigger React rerender
+    UI-->>User: Visual feedback (Show updated ratings/lists)
 ```
 
 - **Global Authentication**: Handled in a centralized Zustand store (`useAuthStore`). The legacy `AuthContext` wraps this store to act as a backward-compatible bridge for existing consumers.
@@ -77,24 +125,47 @@ The application supports three distinct user roles, each with custom dashboard v
 - **Mutations & Invalidation**: Modifying actions trigger mutations. Upon success, they invalidate the cache key patterns (e.g. `['stores']`, `['adminUsers']`), prompting background re-fetches to keep the UI reactive.
 - **Token Refresh**: Axios interceptors intercept `401 Unauthorized` responses, silently call `/api/auth/refresh` to rotate credentials, and retry the failed requests.
 
-### Backend Data Flow & Redis Caching
+### 3. Backend Data Flow & Redis Caching
 
-```
-   [ Client Request (GET /api/stores) ]
-                     │
-                     ├─► [ Check Redis Cache ] ──(Hit)──► Return JSON Data
-                     │
-                   (Miss)
-                     │
-                     ▼
-          [ Query MySQL Database ]
-                     │
-                     ├─► [ Map & Format Results ]
-                     │
-                     ├─► [ Set Redis Cache (1 hr TTL) ]
-                     │
-                     ▼
-             Return Response
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Axios Client
+    participant Controller as Store Controller
+    participant Redis as Redis Cache
+    participant MySQL as MySQL Database
+
+    rect rgb(240, 245, 255)
+        note right of Client: Case 1: Cache Hit (GET Store Listing)
+        Client->>Controller: GET /api/stores?search=pizza
+        Controller->>Redis: GET user:*:stores:search:pizza
+        Redis-->>Controller: Cache Hit (JSON Data)
+        Controller-->>Client: 200 OK (Cached Data)
+    end
+
+    rect rgb(240, 253, 244)
+        note right of Client: Case 2: Cache Miss (GET Store Listing)
+        Client->>Controller: GET /api/stores?search=burger
+        Controller->>Redis: GET user:*:stores:search:burger
+        Redis-->>Controller: null (Cache Miss)
+        Controller->>MySQL: SELECT * FROM stores WHERE ...
+        MySQL-->>Controller: Store Records
+        Controller->>Redis: SET user:userId:stores:search:burger (TTL = 1hr)
+        Controller-->>Client: 200 OK (Fresh Data)
+    end
+
+    rect rgb(255, 247, 237)
+        note right of Client: Case 3: Review Submission & Cache Invalidation
+        Client->>Controller: POST /api/reviews (New Rating)
+        Controller->>MySQL: INSERT INTO reviews ...
+        MySQL-->>Controller: Success
+        Controller->>Redis: DEL store:dashboard:storeId (Clear Stats)
+        Note over Controller, Redis: Async SCAN keys matching 'user:*:stores:*'
+        Controller->>Redis: SCAN cursor MATCH user:*:stores:*
+        Redis-->>Controller: Array of matching keys
+        Controller->>Redis: DEL key1, key2, ... (Non-blocking deletion)
+        Controller-->>Client: 201 Created (Success)
+    end
 ```
 
 - **Read Caching**:
