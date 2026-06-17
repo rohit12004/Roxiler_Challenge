@@ -16,7 +16,7 @@ const runCustomerTests = async () => {
     const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'user1@roxiler.com', password: 'Admin@123' })
+      body: JSON.stringify({ email: 'user1@gmail.com', password: 'Admin@123' })
     });
     const data = await res.json();
     if (res.status === 200 && data.data?.accessToken) {
@@ -159,7 +159,7 @@ const runCustomerTests = async () => {
     const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'user1@roxiler.com', password: currentPassword })
+      body: JSON.stringify({ email: 'user1@gmail.com', password: currentPassword })
     });
     const passed = res.status === 401;
     logResult('Verify Old Password Fails', passed, `Status: ${res.status} (Expected: 401)`);
@@ -173,7 +173,7 @@ const runCustomerTests = async () => {
     const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'user1@roxiler.com', password: newPassword })
+      body: JSON.stringify({ email: 'user1@gmail.com', password: newPassword })
     });
     const data = await res.json();
     const passed = res.status === 200 && !!data.data?.accessToken;

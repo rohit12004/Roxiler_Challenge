@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS ratings (
     review_text VARCHAR(400),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (store_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (store_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_user_store_rating (user_id, store_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Index for store rating lookups

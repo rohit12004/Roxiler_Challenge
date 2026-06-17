@@ -32,8 +32,8 @@ A high-performance, premium, and stateless Store Ratings & Reviews Platform. The
 The application supports three distinct user roles, each with custom dashboard views:
 
 ### 1. Customer (Normal User)
-- **Browse & Search**: Access a real-time list of all registered stores with filtering by store name or address.
-- **Submit Ratings**: Submit new ratings (1-5 stars with optional review comments) or modify previous submissions.
+- **Browse, Search & Sort**: Access a real-time list of all registered stores with filtering by store name or address, and sort them by Name, Overall Rating, or Reviews Count (both Ascending/Descending).
+- **Submit Ratings**: Submit new ratings (1-5 stars with optional review comments) or modify previous submissions. Only one rating per customer-store pair is allowed, enforced via a database-level unique constraint.
 - **Profile & Security**: View account credentials and update passwords under strict complexity validation rules.
 
 ### 2. Store Owner
@@ -241,3 +241,29 @@ For logging into the system:
 - **Admin Account**:
   - **Email**: `Admin@gmail.com`
   - **Password**: `Admin@123`
+
+- **Customer / User Accounts**:
+  - **Email**: `user1@gmail.com` to `user5@gmail.com`
+  - **Password**: `Admin@123`
+
+- **Store Owner Accounts**:
+  - **Email**: `store1@gmail.com` to `store5@gmail.com`
+  - **Password**: `Admin@123`
+
+---
+
+## 🧪 Integration & End-to-End API Testing
+
+The project includes pre-configured End-to-End integration test scripts inside the `server/` directory. These tests run against the pre-seeded data in the database.
+
+To execute the tests, ensure the MySQL and Redis database containers are running, start the backend server, and run:
+
+```powershell
+# Navigate to the server directory
+cd server
+
+# Execute integration scripts
+node test-auth.js      # Verifies user registration, login, token refresh, and logout revocation
+node test-customer.js  # Verifies store directory browsing, searching, rating submission, and modification
+node test-admin.js     # Verifies administrative metrics, account creations, password resets, and dashboards
+```

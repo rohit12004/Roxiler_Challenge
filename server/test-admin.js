@@ -16,7 +16,7 @@ const runAdminTests = async () => {
     const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@roxiler.com', password: 'Admin@123' })
+      body: JSON.stringify({ email: 'Admin@gmail.com', password: 'Admin@123' })
     });
     const data = await res.json();
     if (res.status === 200 && data.data?.accessToken) {
@@ -36,7 +36,7 @@ const runAdminTests = async () => {
     const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'user1@roxiler.com', password: 'Admin@123' })
+      body: JSON.stringify({ email: 'user1@gmail.com', password: 'Admin@123' })
     });
     const data = await res.json();
     if (res.status === 200 && data.data?.accessToken) {
@@ -139,9 +139,9 @@ const runAdminTests = async () => {
     logResult('List Stores with Avg Ratings', false, err.message);
   }
 
-  // Test 9: Get Store Details & Reviews (da67c9c0-992a-4a2c-905b-8e50bc783333 is electronic store)
+  // Test 9: Get Store Details & Reviews (da67c9c0-992a-4a2c-905b-8e50bc782222 is electronic store)
   try {
-    const res = await fetch(`${BASE_URL}/admin/users/da67c9c0-992a-4a2c-905b-8e50bc783333`, {
+    const res = await fetch(`${BASE_URL}/admin/users/da67c9c0-992a-4a2c-905b-8e50bc782222`, {
       method: 'GET',
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
@@ -266,11 +266,11 @@ const runAdminTests = async () => {
 
   // Test 14: Log in as a Store Owner and Access Store Owner Dashboard
   try {
-    // Log in as electronic store owner: owner1@roxiler.com / Owner@123
+    // Log in as electronic store owner: store1@gmail.com / Admin@123
     const loginRes = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'owner1@roxiler.com', password: 'Owner@123' })
+      body: JSON.stringify({ email: 'store1@gmail.com', password: 'Admin@123' })
     });
     const loginData = await loginRes.json();
     const ownerToken = loginData.data?.accessToken;
@@ -284,7 +284,7 @@ const runAdminTests = async () => {
       
       const passed = res.status === 200 &&
                      data.status === 'success' &&
-                     data.data?.store?.email === 'owner1@roxiler.com' &&
+                     data.data?.store?.email === 'store1@gmail.com' &&
                      typeof data.data?.averageRating === 'number' &&
                      Array.isArray(data.data?.reviews);
 

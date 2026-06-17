@@ -45,6 +45,10 @@ export const UserHome = () => {
   const [search, setSearch] = useState('');
   const queryClient = useQueryClient();
 
+  // Sorting State for Stores
+  const [storeSortField, setStoreSortField] = useState('name');
+  const [storeSortOrder, setStoreSortOrder] = useState('asc');
+
   // Load stores list via TanStack Query
   const { data: stores = [], isLoading } = useQuery({
     queryKey: ['stores', search],
@@ -55,6 +59,22 @@ export const UserHome = () => {
       return res.data.data.stores;
     },
     enabled: activeTab === 'stores'
+  });
+
+  // Client-side stores sorting
+  const sortedStores = [...stores].sort((a, b) => {
+    let aVal = a[storeSortField];
+    let bVal = b[storeSortField];
+    if (storeSortField === 'overallRating' || storeSortField === 'reviewsCount') {
+      aVal = Number(aVal);
+      bVal = Number(bVal);
+    } else {
+      aVal = (aVal || '').toLowerCase();
+      bVal = (bVal || '').toLowerCase();
+    }
+    if (aVal < bVal) return storeSortOrder === 'asc' ? -1 : 1;
+    if (aVal > bVal) return storeSortOrder === 'asc' ? 1 : -1;
+    return 0;
   });
 
   // Rating Modal State
@@ -239,20 +259,42 @@ export const UserHome = () => {
           {/* TAB 1: STORES DIRECTORY */}
           {activeTab === 'stores' && (
             <div className="space-y-6">
-              {/* Search Bar */}
-              <div className="relative max-w-md w-full">
-                <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-muted-foreground" />
-                <Input
-                  placeholder="Search stores by name or address..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9 text-sm h-11 border-border bg-card/50 backdrop-blur-sm focus-visible:ring-primary/20"
-                />
+              {/* Search and Sort Controls */}
+              <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
+                <div className="relative max-w-md w-full">
+                  <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search stores by name or address..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9 text-sm h-11 border-border bg-card/50 backdrop-blur-sm focus-visible:ring-primary/20"
+                  />
+                </div>
+                
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Sort By:</span>
+                  <select
+                    value={`${storeSortField}-${storeSortOrder}`}
+                    onChange={(e) => {
+                      const [field, order] = e.target.value.split('-');
+                      setStoreSortField(field);
+                      setStoreSortOrder(order);
+                    }}
+                    className="flex h-11 w-44 rounded-xl border border-input bg-card px-3 py-2 text-xs font-bold ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border-border shadow-sm text-foreground cursor-pointer"
+                  >
+                    <option value="name-asc">Store Name (A-Z)</option>
+                    <option value="name-desc">Store Name (Z-A)</option>
+                    <option value="overallRating-desc">Overall Rating (High-Low)</option>
+                    <option value="overallRating-asc">Overall Rating (Low-High)</option>
+                    <option value="reviewsCount-desc">Reviews Count (High-Low)</option>
+                    <option value="reviewsCount-asc">Reviews Count (Low-High)</option>
+                  </select>
+                </div>
               </div>
 
               {/* Stores Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {stores.map((s) => (
+                {sortedStores.map((s) => (
                   <Card key={s.id} className="border-border hover:border-primary/30 transition duration-300 shadow-sm hover:shadow-md bg-card/60 backdrop-blur-sm flex flex-col justify-between overflow-hidden">
                     <CardHeader className="pb-3 border-b border-border/40">
                       <CardTitle className="text-lg font-bold flex items-start gap-2.5">
@@ -311,7 +353,7 @@ export const UserHome = () => {
                   </Card>
                 ))}
 
-                {stores.length === 0 && (
+                {sortedStores.length === 0 && (
                   <div className="col-span-full py-16 text-center text-muted-foreground border border-dashed border-border rounded-xl bg-card/40">
                     <Store className="h-10 w-10 text-muted-foreground/60 mx-auto mb-2" />
                     <p className="text-sm font-semibold">No stores found matching your search query.</p>
